@@ -1,0 +1,7 @@
+{
+  "name": "Preference (偏爱)",
+  "description": "A minimalist, invitation-only social platform with a strict black-and-white aesthetic, featuring collection management and mutual-follow messaging.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
