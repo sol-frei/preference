@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 // @ts-ignore
 import { useNavigate, Link } from 'react-router-dom';
@@ -10,7 +9,8 @@ import {
   get_banned_words 
 } from '../services/storage';
 import { 
-  UserPlus, Ban, Copy, ShieldAlert, Check, UserCircle, Crown, Loader2, ShieldCheck, ArrowLeft, RefreshCw
+  UserPlus, Ban, Copy, ShieldAlert, Check, UserCircle, Crown, Loader2, 
+  ShieldCheck, ArrowLeft, RefreshCw, Eye, EyeOff, ExternalLink, AlertCircle
 } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import Toast from '../components/Toast';
@@ -22,8 +22,8 @@ export default function AdminPage() {
   const [newUser, setNewUser] = useState<any | null>(null);
   const [bannedWordsInput, setBannedWordsInput] = useState('');
   const [activeTab, setActiveTab] = useState<'users' | 'settings'>('users');
-  const [copiedId, setCopiedId] = useState(false);
-  const [copiedPass, setCopiedPass] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
 
   useEffect(() => {
@@ -69,6 +69,7 @@ export default function AdminPage() {
 
       const generatedUser = await res.json();
       setNewUser(generatedUser);
+      setShowPassword(false); // 重置密码显示状态
       // Immediately add to the list to show the new count
       setUsers(prev => [generatedUser, ...prev]);
       setToast({ msg: '受邀账号生成成功', type: 'success' });
@@ -133,16 +134,17 @@ export default function AdminPage() {
     }
   };
 
-  const copyToClipboard = (text: string, type: 'id' | 'pass') => {
-    navigator.clipboard.writeText(text);
-    if (type === 'id') {
-      setCopiedId(true);
-      setTimeout(() => setCopiedId(false), 2000);
-    } else {
-      setCopiedPass(true);
-      setTimeout(() => setCopiedPass(false), 2000);
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      setToast({ msg: '复制失败', type: 'error' });
     }
   };
+
+  const firstLoginUrl = `${window.location.origin}/first-login`;
 
   return (
     <div className="flex flex-col min-h-screen w-full bg-[#fdfcf0] pb-24 text-black">
@@ -208,24 +210,158 @@ export default function AdminPage() {
               </div>
 
               {newUser && (
-                <div className="p-6 bg-[#fdfcf0] rounded-2xl border-2 border-dashed border-black/10 animate-in zoom-in duration-300">
-                  <p className="text-xs font-black text-red-500 uppercase tracking-widest mb-4">请将以下账号信息复制给受邀者（离开此页面后将无法再次查看）</p>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div className="flex items-center justify-between bg-black/5 p-4 rounded-xl">
-                      <span className="font-mono text-sm">账号: {newUser.login_id}</span>
-                      <button onClick={() => copyToClipboard(newUser.login_id, 'id')} className="text-xs font-bold flex items-center space-x-2">
-                        {copiedId ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                        <span>{copiedId ? '已复制' : '复制'}</span>
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between bg-black/5 p-4 rounded-xl">
-                      <span className="font-mono text-sm font-bold">密码: {newUser.password}</span>
-                      <button onClick={() => copyToClipboard(newUser.password, 'pass')} className="text-xs font-bold flex items-center space-x-2">
-                        {copiedPass ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                        <span>{copiedPass ? '已复制' : '复制'}</span>
-                      </button>
+                <div className="space-y-4 animate-in zoom-in duration-300">
+                  {/* 重要提示 */}
+                  <div className="flex items-start gap-3 bg-amber-50 border-2 border-amber-300 text-amber-900 p-4 rounded-xl">
+                    <AlertCircle size={20} className="flex-shrink-0 mt-0.5" />
+                    <div className="text-sm font-bold">
+                      <p className="mb-1">⚠️ 重要提示</p>
+                      <p className="font-normal">请立即将以下信息发送给新用户。关闭此窗口后将无法再次查看密码！</p>
                     </div>
                   </div>
+
+                  {/* 凭证信息卡片 */}
+                  <div className="p-6 bg-[#fdfcf0] rounded-2xl border-2 border-black/10 space-y-4">
+                    {/* 登录账号 */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-black uppercase tracking-widest text-zinc-500">登录账号</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newUser.login_id}
+                          readOnly
+                          className="flex-1 bg-white border border-black/10 p-3 rounded-xl font-mono text-sm text-black"
+                        />
+                        <button 
+                          onClick={() => copyToClipboard(newUser.login_id, 'login_id')}
+                          className="px-4 py-2 bg-black/5 hover:bg-black/10 rounded-xl transition-all flex items-center space-x-2"
+                        >
+                          {copiedField === 'login_id' ? (
+                            <>
+                              <Check size={16} className="text-green-600" />
+                              <span className="text-xs font-bold">已复制</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={16} />
+                              <span className="text-xs font-bold">复制</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 临时密码 */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-black uppercase tracking-widest text-zinc-500">临时密码</label>
+                      <div className="flex gap-2">
+                        <div className="flex-1 relative">
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            value={newUser.password}
+                            readOnly
+                            className="w-full bg-white border border-black/10 p-3 pr-12 rounded-xl font-mono text-sm text-black"
+                          />
+                          <button
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 hover:bg-black/5 p-1 rounded transition-colors"
+                            title={showPassword ? "隐藏密码" : "显示密码"}
+                          >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
+                        </div>
+                        <button 
+                          onClick={() => copyToClipboard(newUser.password, 'password')}
+                          className="px-4 py-2 bg-black/5 hover:bg-black/10 rounded-xl transition-all flex items-center space-x-2"
+                        >
+                          {copiedField === 'password' ? (
+                            <>
+                              <Check size={16} className="text-green-600" />
+                              <span className="text-xs font-bold">已复制</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={16} />
+                              <span className="text-xs font-bold">复制</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 首次登录链接 */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-black uppercase tracking-widest text-zinc-500">首次登录链接</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={firstLoginUrl}
+                          readOnly
+                          className="flex-1 bg-white border border-black/10 p-3 rounded-xl text-sm text-black"
+                        />
+                        <button 
+                          onClick={() => copyToClipboard(firstLoginUrl, 'url')}
+                          className="px-4 py-2 bg-black/5 hover:bg-black/10 rounded-xl transition-all flex items-center space-x-2"
+                        >
+                          {copiedField === 'url' ? (
+                            <>
+                              <Check size={16} className="text-green-600" />
+                              <span className="text-xs font-bold">已复制</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={16} />
+                              <span className="text-xs font-bold">复制</span>
+                            </>
+                          )}
+                        </button>
+                        <a
+                          href={firstLoginUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2 bg-black text-white rounded-xl hover:opacity-80 transition-all flex items-center space-x-2"
+                          title="在新标签页打开"
+                        >
+                          <ExternalLink size={16} />
+                          <span className="text-xs font-bold">访问</span>
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* 用户信息摘要 */}
+                    <div className="pt-4 border-t border-black/10 grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-zinc-500 font-medium">用户名:</span>
+                        <span className="ml-2 font-bold">{newUser.username}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 font-medium">角色:</span>
+                        <span className="ml-2 font-bold">{newUser.role}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 使用说明 */}
+                  <div className="bg-blue-50 border border-blue-200 text-blue-900 p-4 rounded-xl text-sm space-y-2">
+                    <p className="font-bold flex items-center space-x-2">
+                      <span className="w-5 h-5 bg-blue-900 text-white rounded-full flex items-center justify-center text-xs">i</span>
+                      <span>使用说明</span>
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1 pl-7 text-sm">
+                      <li>将上述<strong>账号</strong>和<strong>临时密码</strong>发送给新用户</li>
+                      <li>告知用户访问<strong>首次登录链接</strong></li>
+                      <li>用户输入临时密码登录后</li>
+                      <li>系统将自动引导用户修改密码</li>
+                    </ol>
+                  </div>
+
+                  {/* 关闭按钮 */}
+                  <button
+                    onClick={() => setNewUser(null)}
+                    className="w-full bg-zinc-800 text-white font-bold py-3 rounded-xl hover:bg-zinc-700 transition-colors"
+                  >
+                    我已保存信息，关闭此窗口
+                  </button>
                 </div>
               )}
             </div>
