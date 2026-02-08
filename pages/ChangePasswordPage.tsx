@@ -59,7 +59,7 @@ const ChangePasswordPage: React.FC = () => {
     if (!session) {
       setError('登录会话已失效，请重新登录');
       setTimeout(() => {
-        navigate('/login');
+        navigate('/first-login');
       }, 2000);
       return;
     }
@@ -68,14 +68,17 @@ const ChangePasswordPage: React.FC = () => {
     setError(null);
 
     try {
-      // 设置超时机制（30秒）
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('请求超时，请检查网络连接')), 30000)
-      );
+      // 获取当前用户
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('获取用户信息失败');
+      }
 
-      // 更新密码
-      const updatePromise = supabase.auth.updateUser({ password });
-      const { data, error: authError } = await Promise.race([updatePromise, timeoutPromise]) as any;
+      // 1. 更新密码
+      const { error: authError } = await supabase.auth.updateUser({ 
+        password: password 
+      });
 
       if (authError) {
         // 如果是会话问题，提示重新登录
@@ -85,32 +88,26 @@ const ChangePasswordPage: React.FC = () => {
         throw new Error(authError.message);
       }
 
-      // 获取当前用户
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        throw new Error('获取用户信息失败');
-      }
-
-      // 更新 profile 中的 is_first_login
+      // 2. 更新 profile 中的 is_first_login（只更新一次）
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ is_first_login: false })
         .eq('id', user.id);
 
       if (profileError) {
-        console.warn('更新 profile 失败:', profileError);
-        // 不阻止流程，仍然允许导航
+        console.error('更新 profile 失败:', profileError);
+        // 即使 profile 更新失败，密码已经修改成功，仍然可以继续
+        // 可以手动在数据库中修改 is_first_login
       }
 
-      // 刷新用户资料
+      // 3. 刷新用户资料
       try {
         await refreshProfile();
       } catch (refreshError) {
         console.warn('刷新 profile 失败:', refreshError);
       }
 
-      // 成功后导航到首页
+      // 4. 成功后导航到首页
       navigate('/', { replace: true });
       
     } catch (err: any) {
@@ -121,7 +118,7 @@ const ChangePasswordPage: React.FC = () => {
       // 如果是会话问题，2秒后跳转到登录页
       if (errorMessage.includes('会话') || errorMessage.includes('session')) {
         setTimeout(() => {
-          navigate('/login');
+          navigate('/first-login');
         }, 2000);
       }
     } finally {
@@ -130,7 +127,7 @@ const ChangePasswordPage: React.FC = () => {
   };
 
   const handleReturnToLogin = () => {
-    navigate('/login');
+    navigate('/first-login');
   };
 
   // 等待会话检查完成
