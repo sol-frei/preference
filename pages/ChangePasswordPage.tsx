@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 // @ts-ignore
 import { useNavigate } from 'react-router-dom';
-import { KeyRound, Eye, EyeOff } from 'lucide-react';
+import { KeyRound, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 const ChangePasswordPage: React.FC = () => {
   const [password, setPassword] = useState('');
@@ -12,8 +12,34 @@ const ChangePasswordPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
   const { refreshProfile } = useAuth();
   const navigate = useNavigate();
+
+  // 检查登录状态
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error || !session) {
+          setHasSession(false);
+          setError('登录会话已过期，请重新登录');
+        } else {
+          setHasSession(true);
+        }
+      } catch (err) {
+        console.error('检查会话失败:', err);
+        setHasSession(false);
+        setError('无法验证登录状态');
+      } finally {
+        setSessionChecked(true);
+      }
+    };
+
+    checkSession();
+  }, []);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +54,16 @@ const ChangePasswordPage: React.FC = () => {
       return;
     }
 
+    // 再次检查会话
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setError('登录会话已失效，请重新登录');
+      setTimeout(() => {
+        navigate('/login');
+      }, 2000);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -39,9 +75,13 @@ const ChangePasswordPage: React.FC = () => {
 
       // 更新密码
       const updatePromise = supabase.auth.updateUser({ password });
-      const { error: authError } = await Promise.race([updatePromise, timeoutPromise]) as any;
+      const { data, error: authError } = await Promise.race([updatePromise, timeoutPromise]) as any;
 
       if (authError) {
+        // 如果是会话问题，提示重新登录
+        if (authError.message?.toLowerCase().includes('session')) {
+          throw new Error('登录会话已失效，即将跳转到登录页面');
+        }
         throw new Error(authError.message);
       }
 
@@ -75,10 +115,51 @@ const ChangePasswordPage: React.FC = () => {
       
     } catch (err: any) {
       console.error('密码更新错误:', err);
-      setError(err.message || '密码更新失败，请重试');
+      const errorMessage = err.message || '密码更新失败，请重试';
+      setError(errorMessage);
+      
+      // 如果是会话问题，2秒后跳转到登录页
+      if (errorMessage.includes('会话') || errorMessage.includes('session')) {
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
+      }
+    } finally {
       setLoading(false);
     }
   };
+
+  const handleReturnToLogin = () => {
+    navigate('/login');
+  };
+
+  // 等待会话检查完成
+  if (!sessionChecked) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#fef9e7]">
+        <div className="text-[#8b7355]">检查登录状态...</div>
+      </div>
+    );
+  }
+
+  // 如果没有会话，显示错误并提供返回登录的按钮
+  if (!hasSession) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#fef9e7] px-6">
+        <div className="w-full max-w-sm space-y-6 text-center">
+          <AlertCircle size={64} className="mx-auto text-red-500 mb-4" />
+          <h1 className="text-2xl font-bold text-[#5d4e37]">登录已过期</h1>
+          <p className="text-[#8b7355]">您的登录会话已失效，请重新登录后修改密码。</p>
+          <button
+            onClick={handleReturnToLogin}
+            className="w-full bg-[#5d4e37] text-white font-bold p-4 rounded-none hover:bg-[#4a3d2c] transition-colors"
+          >
+            返回登录
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-[#fef9e7] px-6">
@@ -91,8 +172,9 @@ const ChangePasswordPage: React.FC = () => {
 
         <form onSubmit={handleUpdate} className="space-y-4">
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 p-3 text-sm rounded">
-              {error}
+            <div className="bg-red-100 border border-red-400 text-red-700 p-3 text-sm rounded flex items-start gap-2">
+              <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
           
@@ -145,19 +227,15 @@ const ChangePasswordPage: React.FC = () => {
           >
             {loading ? "更新中..." : "确认修改并进入"}
           </button>
-        </form>
 
-        {/* 调试信息（生产环境可删除） */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="text-xs text-[#8b7355] text-center mt-4">
-            <p>如果长时间卡住，请检查：</p>
-            <ul className="list-disc list-inside mt-2">
-              <li>网络连接是否正常</li>
-              <li>Supabase 配置是否正确</li>
-              <li>浏览器控制台是否有错误</li>
-            </ul>
-          </div>
-        )}
+          <button
+            type="button"
+            onClick={handleReturnToLogin}
+            className="w-full bg-transparent border border-[#8b7355] text-[#8b7355] font-bold p-4 rounded-none hover:bg-[#8b7355] hover:text-white transition-colors"
+          >
+            返回登录
+          </button>
+        </form>
       </div>
     </div>
   );
