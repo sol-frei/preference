@@ -17,6 +17,8 @@ const ChangePasswordPage: React.FC = () => {
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 验证密码
     if (password !== confirmPassword) {
       setError("两次密码不一致");
       return;
@@ -29,25 +31,52 @@ const ChangePasswordPage: React.FC = () => {
     setLoading(true);
     setError(null);
 
-    const { error: authError } = await supabase.auth.updateUser({ password });
+    try {
+      // 设置超时机制（30秒）
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('请求超时，请检查网络连接')), 30000)
+      );
 
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-    } else {
-      // Update is_first_login in profile
+      // 更新密码
+      const updatePromise = supabase.auth.updateUser({ password });
+      const { error: authError } = await Promise.race([updatePromise, timeoutPromise]) as any;
+
+      if (authError) {
+        throw new Error(authError.message);
+      }
+
+      // 获取当前用户
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('获取用户信息失败');
+      }
+
+      // 更新 profile 中的 is_first_login
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ is_first_login: false })
-        .eq('id', (await supabase.auth.getUser()).data.user?.id);
+        .eq('id', user.id);
 
       if (profileError) {
-        setError(profileError.message);
-        setLoading(false);
-      } else {
-        await refreshProfile();
-        navigate('/');
+        console.warn('更新 profile 失败:', profileError);
+        // 不阻止流程，仍然允许导航
       }
+
+      // 刷新用户资料
+      try {
+        await refreshProfile();
+      } catch (refreshError) {
+        console.warn('刷新 profile 失败:', refreshError);
+      }
+
+      // 成功后导航到首页
+      navigate('/', { replace: true });
+      
+    } catch (err: any) {
+      console.error('密码更新错误:', err);
+      setError(err.message || '密码更新失败，请重试');
+      setLoading(false);
     }
   };
 
@@ -75,12 +104,14 @@ const ChangePasswordPage: React.FC = () => {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-white border border-[#d4c5a9] p-4 pr-12 rounded-none focus:outline-none focus:border-[#8b7355] text-[#5d4e37]"
               required
+              disabled={loading}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b7355] hover:text-[#5d4e37] transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b7355] hover:text-[#5d4e37] transition-colors disabled:opacity-50"
               aria-label={showPassword ? "隐藏密码" : "显示密码"}
+              disabled={loading}
             >
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
@@ -94,12 +125,14 @@ const ChangePasswordPage: React.FC = () => {
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full bg-white border border-[#d4c5a9] p-4 pr-12 rounded-none focus:outline-none focus:border-[#8b7355] text-[#5d4e37]"
               required
+              disabled={loading}
             />
             <button
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b7355] hover:text-[#5d4e37] transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b7355] hover:text-[#5d4e37] transition-colors disabled:opacity-50"
               aria-label={showConfirmPassword ? "隐藏密码" : "显示密码"}
+              disabled={loading}
             >
               {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
@@ -108,11 +141,23 @@ const ChangePasswordPage: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#5d4e37] text-white font-bold p-4 rounded-none hover:bg-[#4a3d2c] transition-colors disabled:opacity-50"
+            className="w-full bg-[#5d4e37] text-white font-bold p-4 rounded-none hover:bg-[#4a3d2c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? "更新中..." : "确认修改并进入"}
           </button>
         </form>
+
+        {/* 调试信息（生产环境可删除） */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="text-xs text-[#8b7355] text-center mt-4">
+            <p>如果长时间卡住，请检查：</p>
+            <ul className="list-disc list-inside mt-2">
+              <li>网络连接是否正常</li>
+              <li>Supabase 配置是否正确</li>
+              <li>浏览器控制台是否有错误</li>
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );
