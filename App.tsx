@@ -4,6 +4,7 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
+import FirstLoginPage from './pages/FirstLoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import HomePage from './pages/HomePage';
 import ProfilePage from './pages/ProfilePage';
@@ -56,14 +57,20 @@ const AppContent: React.FC = () => {
   return (
     <div className="bg-[#fdfcf0] text-black min-h-screen selection:bg-black selection:text-[#fdfcf0]">
       <Routes>
+        {/* 普通登录页面 */}
         <Route path="/login" element={<LoginPage />} />
         
+        {/* 首次登录页面（新用户使用临时密码登录） */}
+        <Route path="/first-login" element={<FirstLoginPage />} />
+        
+        {/* 修改密码页面（需要登录会话） */}
         <Route path="/change-password" element={
-          <ProtectedRoute>
+          <ProtectedRoute requireAuth={true} allowFirstLogin={true}>
             <ChangePasswordPage />
           </ProtectedRoute>
         } />
 
+        {/* 主页（首次登录用户会被重定向到修改密码页面） */}
         <Route path="/" element={
           <ProtectedRoute>
             <HomePage />
